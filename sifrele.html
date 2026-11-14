@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Fiyat Okuyucu – Listeyi şifrele</title>
+<link rel="icon" href="icons/icon-192.png">
+<style>
+:root{color-scheme:dark;--bg:#2B2B2B;--paper:#353535;--gold:#D1AA64;--ink:#1F1F1F;--muted:#B39A6C;--line:#4A4A4A;--miss:#FF8F78;--miss-bg:#40302C}
+*{box-sizing:border-box;margin:0}
+body{font-family:"Avenir Next","Segoe UI",Roboto,system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--gold);
+  padding:calc(28px + env(safe-area-inset-top,0px)) 20px calc(28px + env(safe-area-inset-bottom,0px));line-height:1.45}
+main{max-width:460px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+header{display:flex;align-items:center;gap:12px}
+header img{width:52px;height:52px}
+h1{font-size:22px}
+p{font-size:15px}
+.muted{color:var(--muted);font-size:14px}
+label{display:flex;flex-direction:column;gap:6px;font-size:14px;font-weight:600}
+input[type=file],input[type=password],input[type=text]{font:inherit;color:inherit;background:var(--paper);border:1.5px solid var(--line);
+  border-radius:12px;padding:12px 14px;font-size:16px;width:100%}
+.check{flex-direction:row;align-items:center;gap:8px;font-weight:400}
+button,.dl{font:inherit;font-weight:700;font-size:16px;min-height:50px;border:0;border-radius:12px;background:var(--gold);color:var(--ink);
+  cursor:pointer;display:grid;place-items:center;text-decoration:none;padding:0 18px}
+button:disabled{opacity:.6}
+:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+.box{background:var(--paper);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.err{color:var(--miss);background:var(--miss-bg);border-radius:10px;padding:10px 12px;font-size:14px}
+ul{padding-left:20px;font-size:14px;color:var(--muted);overflow-wrap:anywhere}
+ol{padding-left:20px;font-size:15px;display:flex;flex-direction:column;gap:4px}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main>
+  <header><img src="icons/logo.png" alt="Pegasus"><h1>Listeyi şifrele</h1></header>
+  <p>Excel dosyalarınızı seçin (birden fazla olabilir) ve şifreyi yazın. Hepsi tek listede birleştirilir. İndirilen <b>urunler.enc</b> dosyasını sitenin klasörüne yükleyin. Dosya bu cihazdan dışarı gönderilmez; şifreleme tarayıcının içinde yapılır.</p>
+
+  <form id="form" class="box">
+    <label>Ürün listeleri (Excel ya da CSV, birden fazla seçilebilir)
+      <input type="file" id="file" accept=".xlsx,.xls,.csv,.txt" multiple required>
+    </label>
+    <label>Şifre
+      <input type="password" id="pw" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" minlength="8" required>
+    </label>
+    <label class="check"><input type="checkbox" id="show"> Şifreyi göster</label>
+    <button id="go" type="submit">Şifrele ve indir</button>
+    <p class="err" id="err" role="alert" hidden></p>
+  </form>
+
+  <div class="box" id="done" hidden>
+    <p id="summary"></p>
+    <ul id="files"></ul>
+    <p class="muted" id="dup" hidden></p>
+    <p class="err" id="warn" hidden></p>
+    <a class="dl" id="dl" download="urunler.enc">urunler.enc dosyasını indir</a>
+    <ol>
+      <li>İndirilen <b>urunler.enc</b> dosyasını sitedeki eskisinin yerine yükleyin.</li>
+      <li>Şifresiz Excel dosyasını siteye yüklemeyin.</li>
+    </ol>
+  </div>
+
+  <p class="muted">Şifreyi değiştirirseniz bütün telefonlar bir sonraki açılışta yeni şifreyi sorar. Şifreyi unutursanız liste kaybolmaz: Excel dosyanızı yeni bir şifreyle yeniden şifrelemeniz yeterlidir.</p>
+</main>
+<script src="liste.js"></script>
+<script>
+"use strict";
+(function(){
+  const $ = id => document.getElementById(id);
+  $("show").onchange = e => { $("pw").type = e.target.checked ? "text" : "password"; };
+  let url = null;
+  $("form").onsubmit = async e => {
+    e.preventDefault();
+    const fl = $("file").files, pw = $("pw").value, btn = $("go");
+    $("err").hidden = true; $("done").hidden = true;
+    if (!fl.length || pw.length < 8) return;
+    btn.disabled = true; btn.textContent = "Şifreleniyor…";
+    try {
+      const m = await parseFiles(fl);
+      const obj = {items: m.items, bad: m.bad, source: m.source, listDate: m.listDate};
+      const enc = await encryptList(obj, pw);
+      const check = await decryptList(enc.buffer, pw);              // indirmeden önce geri açılabildiğini doğrula
+      if (check.items.length !== obj.items.length) throw new Error("Doğrulama başarısız.");
+      if (url) URL.revokeObjectURL(url);
+      url = URL.createObjectURL(new Blob([enc], {type:"application/octet-stream"}));
+      $("dl").href = url;
+      $("summary").textContent = (m.perFile.length > 1 ? m.perFile.length + " dosyadan " : "") + obj.items.length.toLocaleString("tr-TR") + " ürün şifrelendi.";
+      const ul = $("files"); ul.textContent = "";
+      m.perFile.forEach(x => { const li = document.createElement("li"); li.textContent = x.name + ": " + x.count.toLocaleString("tr-TR") + " ürün"; ul.appendChild(li); });
+      $("dup").hidden = !m.dup;
+      $("dup").textContent = m.dup.toLocaleString("tr-TR") + " barkod birden fazla kez geçiyor; yukarıdaki sırada sonra gelen dosyadaki (aynı dosyadaysa alttaki satırdaki) fiyat kullanıldı.";
+      const w = $("warn");
+      if (obj.bad){ w.hidden = false; w.textContent = obj.bad.toLocaleString("tr-TR") + " satırın barkodu bozuk (8,69E+12 gibi) ve atlandı. Excel’de barkod sütununu “Metin” yapın ya da dosyayı .xlsx olarak kaydedin."; }
+      else w.hidden = true;
+      $("done").hidden = false;
+      $("dl").click();
+    } catch(err){
+      $("err").hidden = false;
+      $("err").textContent = err.code === "insecure" ? "Bu sayfa şifreleme için https adresinden açılmalı." : "Dosya şifrelenemedi: " + err.message;
+    } finally { btn.disabled = false; btn.textContent = "Şifrele ve indir"; }
+  };
+})();
+</script>
+</body>
+</html>

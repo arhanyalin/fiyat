@@ -1,0 +1,535 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fiyat Okuyucu</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#1F1F1F">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Fiyat">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png">
+<style>
+:root{
+  color-scheme:dark;
+  --ink:#1F1F1F;        /* kamera alanı, altın üstündeki yazı */
+  --shelf:#2B2B2B;      /* koyu gri zemin */
+  --paper:#353535;      /* kartlar, giriş alanı */
+  --tag:#D1AA64;        /* Pegasus altını (logodan örneklendi) */
+  --tag-ink:#1F1F1F;
+  --muted:#B39A6C;
+  --line:#4A4A4A;
+  --miss:#FF8F78;       /* listede yok */
+  --miss-bg:#40302C;
+  --text:#D1AA64;
+  --font:"Avenir Next","Segoe UI",Roboto,system-ui,-apple-system,sans-serif;
+  --font-tight:"Avenir Next Condensed","Roboto Condensed","Arial Narrow",var(--font);
+}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{
+  font-family:var(--font);color:var(--text);background:var(--shelf);
+  display:flex;flex-direction:column;overflow:hidden;
+  -webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%;
+}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none}
+:focus-visible{outline:3px solid var(--tag);outline-offset:2px}
+[hidden]{display:none!important}
+
+/* ---------- Kamera ---------- */
+.cam{
+  position:relative;flex:0 0 42%;min-height:230px;background:var(--ink);color:var(--tag);overflow:hidden;
+  padding-top:env(safe-area-inset-top,0px);
+}
+.cam video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.cam-bar{
+  position:relative;z-index:2;display:flex;align-items:center;gap:8px;
+  padding:10px 12px;background:linear-gradient(rgba(31,31,31,.75),rgba(31,31,31,0));
+}
+.cam-bar h1{font-size:17px;font-weight:700;letter-spacing:.01em;flex:1}
+.icon-btn{
+  width:44px;height:44px;border-radius:50%;display:grid;place-items:center;
+  background:rgba(209,170,100,.16);color:var(--tag);
+}
+.icon-btn[aria-pressed="true"]{background:var(--tag);color:var(--tag-ink)}
+.icon-btn svg{width:22px;height:22px}
+.frame{
+  position:absolute;z-index:1;left:9%;right:9%;top:50%;height:38%;transform:translateY(-38%);
+  border-radius:14px;box-shadow:0 0 0 100vmax rgba(31,31,31,.5);pointer-events:none;
+}
+.frame::before,.frame::after{
+  content:"";position:absolute;inset:-2px;border:3px solid var(--tag);border-radius:16px;
+  clip-path:polygon(0 0,34px 0,34px 34px,0 34px, 0 calc(100% - 34px),34px calc(100% - 34px),34px 100%,0 100%);
+}
+.frame::after{transform:scaleX(-1)}
+.frame.hit::before,.frame.hit::after{border-color:#FFF3D6}
+.cam-msg{
+  position:absolute;z-index:3;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:14px;padding:24px;text-align:center;background:var(--ink);
+}
+.cam-msg p{font-size:15px;line-height:1.45;max-width:30ch;color:var(--tag)}
+.cam-msg img{width:96px;height:96px}
+.cam-bar img{width:34px;height:34px;flex:none}
+.btn{
+  min-height:48px;padding:0 22px;border-radius:12px;font-weight:700;font-size:16px;
+  background:var(--tag);color:var(--tag-ink);
+}
+.btn.quiet{background:transparent;color:var(--text);border:1.5px solid var(--line)}
+
+/* ---------- Sonuç ---------- */
+main{flex:1;min-height:0;display:flex;flex-direction:column;padding:12px 12px 0}
+.result{
+  background:var(--paper);border-radius:16px;padding:16px 16px 14px;min-height:148px;
+  display:flex;flex-direction:column;justify-content:center;
+}
+.result.idle{align-items:center;text-align:center;color:var(--muted);font-size:15px;line-height:1.45}
+.result .name{font-size:19px;font-weight:600;line-height:1.25;overflow-wrap:anywhere}
+.result .code{font-size:13px;color:var(--muted);margin-top:3px;font-variant-numeric:tabular-nums}
+.price{
+  align-self:flex-start;margin-top:12px;display:flex;align-items:flex-start;
+  color:var(--tag);border:2px solid var(--tag);border-radius:10px;padding:4px 14px 6px 12px;
+  font-family:var(--font-tight);font-weight:800;line-height:1;font-variant-numeric:tabular-nums;
+}
+.price .lira{font-size:60px;letter-spacing:-.01em}
+.price .kurus{font-size:26px;margin:7px 0 0 2px}
+.price .cur{font-size:26px;margin:7px 0 0 6px;font-weight:700}
+.result.miss{background:var(--miss-bg)}
+.result.miss .name{color:var(--miss)}
+.result.miss p{font-size:14px;color:var(--text);margin-top:6px;line-height:1.4}
+@media (prefers-reduced-motion:no-preference){
+  .result.pop{animation:pop .18s ease-out}
+  @keyframes pop{from{transform:scale(.97)}to{transform:none}}
+}
+
+/* ---------- Elle giriş ---------- */
+.manual{display:flex;gap:8px;margin-top:10px}
+.manual input{
+  flex:1;min-width:0;height:48px;border-radius:12px;border:1.5px solid var(--line);background:var(--paper);
+  padding:0 14px;font-size:17px;font-variant-numeric:tabular-nums;
+}
+.manual input::placeholder{color:var(--muted)}
+
+/* ---------- Geçmiş ---------- */
+.history{flex:1;min-height:0;overflow-y:auto;margin-top:12px;padding-bottom:calc(10px + env(safe-area-inset-bottom,0px));-webkit-overflow-scrolling:touch}
+.history h2{font-size:13px;font-weight:600;color:var(--muted);padding:0 4px 4px}
+.history ul{list-style:none;padding:0}
+.history li button{
+  width:100%;display:flex;align-items:baseline;gap:10px;text-align:left;
+  padding:11px 4px;border-top:1px solid var(--line);font-size:15px;
+}
+.history .n{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.history .p{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.history .p.none{color:var(--miss);font-weight:600}
+
+/* ---------- Liste durumu ---------- */
+.sheet{
+  position:fixed;z-index:10;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:flex-end;
+}
+.sheet-body{
+  width:100%;background:var(--paper);border-radius:20px 20px 0 0;
+  padding:20px 18px calc(20px + env(safe-area-inset-bottom,0px));max-height:85%;overflow-y:auto;
+}
+.sheet h2{font-size:20px;font-weight:700}
+.sheet dl{margin:14px 0 4px;display:grid;grid-template-columns:auto 1fr;gap:8px 16px;font-size:15px}
+.sheet dt{color:var(--muted)}
+.sheet dd{font-weight:600;text-align:right;font-variant-numeric:tabular-nums}
+.sheet .note{font-size:14px;line-height:1.45;color:var(--muted);margin-top:10px}
+.sheet .warn{font-size:14px;line-height:1.45;color:var(--miss);background:var(--miss-bg);border-radius:10px;padding:10px 12px;margin-top:12px}
+.sheet .actions{display:flex;flex-direction:column;gap:10px;margin-top:18px}
+.lock{
+  position:fixed;z-index:30;inset:0;background:var(--shelf);display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:10px;padding:24px calc(24px + env(safe-area-inset-right,0px)) 24px calc(24px + env(safe-area-inset-left,0px));
+}
+.lock img{width:132px;height:132px}
+.lock h2{font-size:22px;font-weight:700;margin-bottom:10px}
+.lock form{width:100%;max-width:320px;display:flex;flex-direction:column;gap:10px}
+.lock input{
+  height:52px;border-radius:12px;border:1.5px solid var(--line);background:var(--paper);padding:0 14px;font-size:18px;text-align:center;
+}
+.lock input::placeholder{color:var(--muted)}
+.lock p{font-size:14px;line-height:1.4;text-align:center;color:var(--miss)}
+.btn:disabled{opacity:.6}
+.toast{
+  position:fixed;z-index:20;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);
+  background:var(--ink);color:var(--tag);font-size:14px;padding:10px 16px;border-radius:999px;max-width:90%;text-align:center;
+  border:1px solid var(--tag);
+}
+</style>
+</head>
+<body>
+
+<section class="cam" aria-label="Barkod kamerası">
+  <video id="video" playsinline muted autoplay></video>
+  <div class="cam-bar">
+    <img src="icons/logo.png" alt="Pegasus">
+    <h1>Fiyat Okuyucu</h1>
+    <button class="icon-btn" id="torchBtn" aria-label="Fener" aria-pressed="false" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2h8l-1 6 2 3v9a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2v-9l2-3z"/><path d="M12 13v3"/></svg>
+    </button>
+    <button class="icon-btn" id="infoBtn" aria-label="Ürün listesi">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+    </button>
+  </div>
+  <div class="frame" id="frame"></div>
+  <div class="cam-msg" id="camMsg">
+    <img src="icons/logo.png" alt="">
+    <p id="camMsgText">Barkod okutmak için kamerayı açın.</p>
+    <button class="btn" id="camStart">Kamerayı aç</button>
+  </div>
+</section>
+
+<main>
+  <div class="result idle" id="result" aria-live="polite">Barkodu çerçevenin içine getirin.</div>
+
+  <form class="manual" id="manual">
+    <input id="manualInput" inputmode="numeric" autocomplete="off" enterkeyhint="search"
+           placeholder="Barkod numarasını yazın" aria-label="Barkod numarası">
+    <button class="btn" type="submit">Ara</button>
+  </form>
+
+  <div class="history" id="history" hidden>
+    <h2>Son okutulanlar</h2>
+    <ul id="historyList"></ul>
+  </div>
+</main>
+
+<div class="sheet" id="sheet" hidden>
+  <div class="sheet-body" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+    <h2 id="sheetTitle">Ürün listesi</h2>
+    <dl>
+      <dt>Ürün sayısı</dt><dd id="sCount">–</dd>
+      <dt>Liste tarihi</dt><dd id="sDate">–</dd>
+      <dt>Telefona indirildi</dt><dd id="sFetched">–</dd>
+    </dl>
+    <p class="warn" id="sWarn" hidden></p>
+    <p class="note">Liste, uygulama her açıldığında internet varsa kendiliğinden yenilenir. İnternet yokken telefondaki son liste kullanılır.</p>
+    <div class="actions">
+      <button class="btn" id="refreshBtn">Listeyi yenile</button>
+      <button class="btn quiet" id="fileBtn">Dosyadan yükle (Excel / CSV)</button>
+      <button class="btn quiet" id="closeSheet">Kapat</button>
+      <button class="btn quiet" id="logoutBtn">Çıkış yap</button>
+    </div>
+    <input type="file" id="fileInput" accept=".xlsx,.xls,.csv,.txt" multiple hidden>
+  </div>
+</div>
+<div class="lock" id="lock">
+  <img src="icons/logo.png" alt="Pegasus">
+  <h2>Fiyat Okuyucu</h2>
+  <form id="lockForm" hidden>
+    <p id="lockMsg" role="alert" hidden></p>
+    <input id="lockInput" type="password" autocomplete="current-password" autocapitalize="off" autocorrect="off"
+           spellcheck="false" placeholder="Şifre" aria-label="Şifre">
+    <button class="btn" id="lockBtn" type="submit">Giriş yap</button>
+  </form>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="liste.js"></script>
+<script>
+"use strict";
+(function(){
+/* ============================================================
+   Fiyat Okuyucu
+   Ürün listesi: bu dosyayla aynı klasördeki urunler.enc (sifrele.html ile üretilen şifreli dosya).
+   Şifre kodun içinde yoktur; liste yalnızca doğru şifreyle çözülür.
+   ============================================================ */
+const DATA_FILE = "urunler.enc";
+const $ = id => document.getElementById(id);
+
+/* ---------- Durum ---------- */
+let products = new Map();          // anahtar -> [ad, fiyat]
+let meta = null;                   // {count, listDate, fetched, bad, source}
+let unlocked = false, savedPw = null, pendingEnc = null;
+
+/* ---------- Telefonda saklama (IndexedDB) ---------- */
+function idb(){
+  return new Promise((ok, no) => {
+    const r = indexedDB.open("fiyat-okuyucu", 1);
+    r.onupgradeneeded = () => r.result.createObjectStore("kv");
+    r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error);
+  });
+}
+async function idbGet(k){
+  const db = await idb();
+  return new Promise((ok, no) => { const q = db.transaction("kv").objectStore("kv").get(k); q.onsuccess = () => ok(q.result); q.onerror = () => no(q.error); });
+}
+async function idbSet(k, v){
+  const db = await idb();
+  return new Promise((ok, no) => { const t = db.transaction("kv", "readwrite"); t.objectStore("kv").put(v, k); t.oncomplete = ok; t.onerror = () => no(t.error); });
+}
+function useData(d){
+  products = new Map(d.items.map(i => [i[0], [i[1], i[2]]]));
+  meta = {count: products.size, listDate: d.listDate, fetched: d.fetched, bad: d.bad, source: d.source};
+  renderMeta();
+}
+async function fetchEnc(){          // sunucudaki şifreli liste; yoksa null, internet yoksa hata
+  const res = await fetch(DATA_FILE + "?t=" + Date.now(), {cache:"no-store"});
+  if (!res.ok || /text\/html/.test(res.headers.get("content-type") || "")) return null;
+  return {buf: await res.arrayBuffer(), lm: res.headers.get("last-modified")};
+}
+async function openList(enc, pw){   // şifre yanlışsa hata fırlatır
+  const d = await decryptList(enc.buf, pw);
+  d.fetched = Date.now();
+  if (!d.listDate && enc.lm) d.listDate = Date.parse(enc.lm);
+  useData(d); savedPw = pw;
+  try { await idbSet("data", d); await idbSet("pw", pw); } catch(e){}
+}
+async function wipe(){
+  products = new Map(); meta = null; savedPw = null; history = []; renderHistory();
+  const box = $("result"); box.className = "result idle"; box.textContent = "Barkodu çerçevenin içine getirin.";
+  try { await idbSet("data", null); await idbSet("pw", null); } catch(e){}
+}
+function lock(msg){
+  unlocked = false; stopCamera();
+  $("sheet").hidden = true; $("lock").hidden = false; $("lockForm").hidden = false;
+  $("lockMsg").textContent = msg || ""; $("lockMsg").hidden = !msg;
+}
+function unlock(){
+  unlocked = true; $("lock").hidden = true; $("lockInput").value = "";
+  startCamera();
+}
+async function initData(){
+  let cached = null;
+  try { cached = await idbGet("data"); savedPw = await idbGet("pw"); } catch(e){}
+  if (cached && cached.items && savedPw){ useData(cached); unlock(); }
+  let enc;
+  try { enc = await fetchEnc(); }
+  catch(e){ if (!unlocked) lock("İnternet bağlantısı yok. İlk giriş için internet gerekir."); return; }
+  if (!enc){ if (!unlocked) lock("Sunucuda ürün listesi (urunler.enc) bulunamadı."); return; }
+  pendingEnc = enc;
+  if (unlocked){
+    try { await openList(enc, savedPw); }
+    catch(e){ if (e.code === "password"){ await wipe(); lock("Şifre değişti. Yeni şifreyi girin."); } }
+    return;
+  }
+  lock("");
+}
+
+/* ---------- Arayüz ---------- */
+const fmtDate = t => t ? new Date(t).toLocaleDateString("tr-TR", {day:"numeric", month:"long", year:"numeric"}) : "–";
+function renderMeta(){
+  if (!meta) return;
+  $("sCount").textContent = meta.count.toLocaleString("tr-TR");
+  $("sDate").textContent = fmtDate(meta.listDate);
+  $("sFetched").textContent = fmtDate(meta.fetched);
+  const w = $("sWarn");
+  if (meta.bad){
+    w.hidden = false;
+    w.textContent = meta.bad.toLocaleString("tr-TR") + " satırın barkodu bozuk (8,69E+12 gibi) ve atlandı. Excel’de barkod sütununu “Metin” yapıp dosyayı yeniden kaydedin ya da CSV yerine .xlsx kullanın.";
+  } else w.hidden = true;
+}
+let toastTimer;
+function toast(msg){
+  const t = $("toast"); t.textContent = msg; t.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.hidden = true, 3500);
+}
+function priceParts(p){
+  const [l, k] = p.toFixed(2).split(".");
+  return [Number(l).toLocaleString("tr-TR"), k];
+}
+const priceText = p => p == null ? "Fiyat yok" : p.toLocaleString("tr-TR", {minimumFractionDigits:2, maximumFractionDigits:2}) + " ₺";
+
+let history = [];
+function show(code, fromHistory){
+  const key = barcodeKey(code);
+  if (!key) return;
+  const hit = products.get(key);
+  const box = $("result");
+  box.className = "result"; box.textContent = "";
+  const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; box.appendChild(e); return e; };
+  if (hit){
+    el("div", "name", hit[0] || "Adsız ürün");
+    el("div", "code", String(code));
+    if (hit[1] != null){
+      const [l, k] = priceParts(hit[1]);
+      const p = el("div", "price"); p.setAttribute("aria-label", priceText(hit[1]));
+      for (const [c, t] of [["lira", l], ["kurus", "," + k], ["cur", "₺"]]){ const s = document.createElement("span"); s.className = c; s.textContent = t; s.setAttribute("aria-hidden", "true"); p.appendChild(s); }
+    } else el("p", "", "Bu ürünün listede fiyatı girilmemiş.").style.cssText = "margin-top:10px;color:var(--muted);font-size:15px";
+  } else {
+    box.classList.add("miss");
+    el("div", "name", "Bu barkod listede yok");
+    el("div", "code", String(code));
+    el("p", "", products.size ? "Barkodu tekrar okutun ya da numarayı elle yazın. Ürün yeniyse liste güncellenmemiş olabilir." : "Telefonda ürün listesi yok. Sağ üstteki menüden listeyi yenileyin.");
+  }
+  void box.offsetWidth; box.classList.add("pop");
+  if (!fromHistory){
+    history = history.filter(h => h.key !== key);
+    history.unshift({key, code: String(code)});
+    history = history.slice(0, 12);
+    renderHistory();
+  }
+}
+function renderHistory(){
+  const ul = $("historyList"); ul.textContent = "";
+  $("history").hidden = history.length < 2;
+  history.slice(1).forEach(h => {
+    const hit = products.get(h.key);
+    const li = document.createElement("li"), b = document.createElement("button");
+    const n = document.createElement("span"); n.className = "n"; n.textContent = hit ? (hit[0] || h.code) : h.code;
+    const p = document.createElement("span"); p.className = "p" + (hit ? "" : " none"); p.textContent = hit ? priceText(hit[1]) : "Listede yok";
+    b.append(n, p); b.onclick = () => show(h.code, true); li.appendChild(b); ul.appendChild(li);
+  });
+}
+
+/* ---------- Okutma geri bildirimi ---------- */
+let audioCtx;
+function feedback(){
+  if (navigator.vibrate) navigator.vibrate(50);
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.frequency.value = 1320; g.gain.value = .08; o.connect(g).connect(audioCtx.destination);
+    o.start(); o.stop(audioCtx.currentTime + .07);
+  } catch(e){}
+  const f = $("frame"); f.classList.add("hit"); setTimeout(() => f.classList.remove("hit"), 250);
+}
+let lastCode = "", lastAt = 0;
+function onScan(code){
+  const now = Date.now();
+  if (code === lastCode && now - lastAt < 2500){ lastAt = now; return; }
+  lastCode = code; lastAt = now;
+  feedback(); show(code);
+}
+
+/* ---------- Kamera ---------- */
+const video = $("video");
+const CONSTRAINTS = {audio:false, video:{facingMode:{ideal:"environment"}, width:{ideal:1280}, height:{ideal:720}}};
+let running = false, zxReader = null, stream = null;
+
+async function startCamera(){
+  if (running) return;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    return camError("Bu tarayıcı kameraya erişemiyor. Sayfayı https adresinden, Safari ya da Chrome ile açın.");
+  }
+  $("camMsgText").textContent = "Kamera açılıyor…"; $("camStart").hidden = true;
+  try {
+    let native = false;
+    if ("BarcodeDetector" in window){
+      const want = ["ean_13","ean_8","upc_a","upc_e","code_128","code_39","itf","qr_code"];
+      const have = await BarcodeDetector.getSupportedFormats();
+      const formats = want.filter(f => have.includes(f));
+      if (formats.includes("ean_13")){
+        native = true;
+        stream = await navigator.mediaDevices.getUserMedia(CONSTRAINTS);
+        video.srcObject = stream; await video.play();
+        const det = new BarcodeDetector({formats});
+        running = true;
+        (async function tick(){
+          if (!running) return;
+          if (video.readyState >= 2){
+            try { const r = await det.detect(video); if (r.length && r[0].rawValue) onScan(r[0].rawValue); } catch(e){}
+          }
+          setTimeout(tick, 120);
+        })();
+      }
+    }
+    if (!native){
+      if (!window.ZXing) await loadScript("vendor/zxing.min.js");
+      const F = ZXing.BarcodeFormat, hints = new Map();
+      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E, F.CODE_128, F.CODE_39, F.ITF, F.QR_CODE]);
+      zxReader = new ZXing.BrowserMultiFormatReader(hints, 120);
+      running = true;
+      await zxReader.decodeFromConstraints(CONSTRAINTS, video, res => { if (res) onScan(res.getText()); });
+      stream = video.srcObject;
+    }
+    $("camMsg").hidden = true;
+    setupTorch();
+  } catch(e){
+    stopCamera();
+    const denied = e && (e.name === "NotAllowedError" || e.name === "SecurityError");
+    camError(denied
+      ? "Kamera izni verilmedi. Telefonun ayarlarından bu site için kameraya izin verin, sonra tekrar deneyin."
+      : "Kamera açılamadı. Başka bir uygulama kamerayı kullanıyor olabilir.");
+  }
+}
+function camError(msg){
+  $("camMsg").hidden = false; $("camMsgText").textContent = msg;
+  $("camStart").hidden = false; $("camStart").textContent = "Tekrar dene";
+}
+function stopCamera(){
+  running = false;
+  try { if (zxReader){ zxReader.reset(); zxReader = null; } } catch(e){}
+  const s = stream || video.srcObject;
+  if (s) s.getTracks().forEach(t => t.stop());
+  stream = null; video.srcObject = null;
+  $("torchBtn").hidden = true; $("torchBtn").setAttribute("aria-pressed", "false");
+}
+function setupTorch(){
+  const track = stream && stream.getVideoTracks()[0];
+  const caps = track && track.getCapabilities ? track.getCapabilities() : {};
+  const btn = $("torchBtn");
+  btn.hidden = !caps.torch;
+  btn.onclick = async () => {
+    const on = btn.getAttribute("aria-pressed") !== "true";
+    try { await track.applyConstraints({advanced:[{torch:on}]}); btn.setAttribute("aria-pressed", String(on)); } catch(e){}
+  };
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden){
+    if (running){ stopCamera(); $("camMsg").hidden = false; $("camMsgText").textContent = "Kamera duraklatıldı."; $("camStart").hidden = false; $("camStart").textContent = "Kamerayı aç"; }
+  } else if (!running && unlocked) startCamera();
+});
+
+/* ---------- Olaylar ---------- */
+$("camStart").onclick = startCamera;
+$("manual").onsubmit = e => {
+  e.preventDefault();
+  const inp = $("manualInput"), v = inp.value.trim();
+  if (!v) return;
+  show(v); inp.value = ""; inp.blur();
+};
+$("infoBtn").onclick = () => { $("sheet").hidden = false; };
+$("closeSheet").onclick = () => { $("sheet").hidden = true; };
+$("sheet").onclick = e => { if (e.target === $("sheet")) $("sheet").hidden = true; };
+$("refreshBtn").onclick = async () => {
+  const b = $("refreshBtn"); b.disabled = true; b.textContent = "Liste yenileniyor…";
+  try {
+    const enc = await fetchEnc();
+    if (!enc) toast("Sunucuda ürün listesi bulunamadı");
+    else { pendingEnc = enc; await openList(enc, savedPw); toast("Liste yenilendi"); }
+  } catch(e){
+    if (e.code === "password"){ await wipe(); lock("Şifre değişti. Yeni şifreyi girin."); }
+    else toast(e.code === "format" ? "Sunucudaki liste dosyası bozuk" : "İnternet yok. Telefondaki liste kullanılıyor.");
+  }
+  b.disabled = false; b.textContent = "Listeyi yenile";
+};
+$("logoutBtn").onclick = async () => { await wipe(); lock(""); };
+$("lockForm").onsubmit = async e => {
+  e.preventDefault();
+  const pw = $("lockInput").value; if (!pw) return;
+  const btn = $("lockBtn"), say = m => { $("lockMsg").textContent = m; $("lockMsg").hidden = false; };
+  btn.disabled = true; btn.textContent = "Kontrol ediliyor…";
+  try {
+    if (!pendingEnc){
+      try { pendingEnc = await fetchEnc(); } catch(_){ say("İnternet bağlantısı yok. Bağlanıp tekrar deneyin."); return; }
+      if (!pendingEnc){ say("Sunucuda ürün listesi (urunler.enc) bulunamadı."); return; }
+    }
+    await openList(pendingEnc, pw);
+    unlock();
+  } catch(err){
+    say(err.code === "password" ? "Şifre yanlış." : err.code === "insecure" ? "Bu sayfa yalnızca https adresinden açılabilir." : "Ürün listesi dosyası okunamadı.");
+    $("lockInput").select();
+  } finally { btn.disabled = false; btn.textContent = "Giriş yap"; }
+};
+$("fileBtn").onclick = () => $("fileInput").click();
+$("fileInput").onchange = async e => {
+  if (!e.target.files.length) return;
+  try {
+    const m = await parseFiles(e.target.files);
+    const d = {items: m.items, bad: m.bad, source: m.source, fetched: Date.now(), listDate: m.listDate};
+    useData(d); try { await idbSet("data", d); } catch(_){}
+    toast(d.items.length.toLocaleString("tr-TR") + " ürün yüklendi");
+  } catch(err){ toast("Dosya okunamadı: " + err.message); }
+  e.target.value = "";
+};
+
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+initData();
+})();
+</script>
+</body>
+</html>
